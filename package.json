@@ -1,7 +1,11 @@
 {
   "name": "revenue-intelligence-inbox-workspace",
   "private": true,
+  "workspaces": [
+    "candidate"
+  ],
   "scripts": {
+    "install:all": "npm --prefix candidate install",
     "dev": "npm --prefix candidate run dev",
     "build": "npm --prefix candidate run build",
     "preview": "npm --prefix candidate run preview",
