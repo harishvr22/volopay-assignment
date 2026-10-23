@@ -1,0 +1,10 @@
+{
+  "name": "revenue-intelligence-inbox-workspace",
+  "private": true,
+  "scripts": {
+    "dev": "npm --prefix candidate run dev",
+    "build": "npm --prefix candidate run build",
+    "preview": "npm --prefix candidate run preview",
+    "test": "npm --prefix candidate test"
+  }
+}

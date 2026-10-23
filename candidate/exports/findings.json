@@ -1,0 +1,31 @@
+{
+  "evidence_findings": [
+    {
+      "id": "finding-1",
+      "title": "Post-Sale Defect Escalation in Triage Meeting (M07) vs Pipeline Tracking",
+      "sourceReference": "Meeting M07, Turns 3, 12, 23, and 25",
+      "observation": "Customer A demonstrated four critical billing and reimbursement bugs on screen.",
+      "productDecision": "Built a multi-route model pairing Customer Follow-up with Sales Coaching/Support Escalation."
+    },
+    {
+      "id": "finding-2",
+      "title": "Discrepancy Between Telephony Metadata and Spoken Caller Identity (C06)",
+      "sourceReference": "Call C06, Short exact quote",
+      "observation": "Rep name was recorded as Meera, but caller introduced himself as Ravi.",
+      "productDecision": "Surfaced both stored metadata and verbal transcript identification side-by-side."
+    },
+    {
+      "id": "finding-3",
+      "title": "Strict Regulatory Compliance Boundary in Partner Discovery (M01)",
+      "sourceReference": "Meeting M01, Turns 2 and 4",
+      "observation": "Partner sought individual accounts; rep clarified SpendNest requires registered US business entities.",
+      "productDecision": "Separated Partner Coordination from sales routing and established qualification boundaries."
+    }
+  ],
+  "rejected_decision": {
+    "title": "Deliberately Rejecting Automated Pipeline Currency Totaling & Win-Rate Forecasting",
+    "rejectedAlternative": "Synthesizing deal values and stage forecasts from conversational numbers.",
+    "whyRejected": "DATA_DICTIONARY strictly prohibits inventing revenue or pipeline totals without authoritative CRM tables.",
+    "tradeOffAccepted": "No speculative revenue numbers; 100% verifiable operational intelligence."
+  }
+}

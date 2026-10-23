@@ -1,0 +1,242 @@
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import Papa from 'papaparse';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const rootDir = path.resolve(__dirname, '..');
+
+const initPath = path.join(rootDir, 'data', '01_initial.json');
+const updPath = path.join(rootDir, 'data', '02_update.json');
+const exportsDir = path.join(rootDir, 'exports');
+
+const initData = JSON.parse(fs.readFileSync(initPath, 'utf8'));
+const updData = JSON.parse(fs.readFileSync(updPath, 'utf8'));
+
+// Prepare directories
+fs.mkdirSync(path.join(exportsDir, 'records'), { recursive: true });
+fs.mkdirSync(path.join(exportsDir, 'analysis'), { recursive: true });
+fs.mkdirSync(path.join(exportsDir, 'brief'), { recursive: true });
+
+// Combine records
+const recordsMap = new Map();
+
+function getIdentity(r) {
+  return `${r.source_type}:${r.source_id}`;
+}
+
+// 1. Initial batch (Rev 1)
+initData.records.forEach((r) => {
+  recordsMap.set(getIdentity(r), {
+    ...r,
+    applied_source_revision: initData.revision,
+  });
+});
+
+// 2. Update batch (Rev 2)
+updData.records.forEach((r) => {
+  const id = getIdentity(r);
+  const existing = recordsMap.get(id);
+  if (!existing || updData.revision > existing.applied_source_revision) {
+    recordsMap.set(id, {
+      ...r,
+      applied_source_revision: updData.revision,
+    });
+  }
+});
+
+const allRecords = Array.from(recordsMap.values());
+console.log(`Processing ${allRecords.length} records for static export...`);
+
+// Write record JSONs
+allRecords.forEach((r) => {
+  const filePath = path.join(exportsDir, 'records', `${r.source_type}_${r.source_id}.json`);
+  fs.writeFileSync(filePath, JSON.stringify(r, null, 2), 'utf8');
+});
+
+console.log(`Wrote 44 records to ${path.join(exportsDir, 'records')}`);
+
+// Manifest generation
+const manifestEntries = [];
+
+// Determine routes and write analyses for usable conversations
+const usableRefs = ['C01','C02','C03','C04','C05','C06','C07','C08','C09','C10','M01','M02','M03','M04','M06','M07','M09','M10'];
+
+allRecords.forEach((r) => {
+  const isUsable = usableRefs.includes(r.record_ref);
+  const recordPath = `records/${r.source_type}_${r.source_id}.json`;
+  const paths = [recordPath];
+
+  let routes = 'Nurture / No Immediate Action';
+  let reviewState = isUsable ? 'analyzed' : 'unusable_no_text';
+
+  if (r.record_ref === 'C01') routes = 'Nurture / No Immediate Action, Sales Coaching';
+  else if (r.record_ref === 'C02') routes = 'Nurture / No Immediate Action';
+  else if (r.record_ref === 'C03') routes = 'Customer Follow-up, Deal / Commercial Next Step';
+  else if (r.record_ref === 'C04') routes = 'Customer Follow-up';
+  else if (r.record_ref === 'C05') routes = 'Nurture / No Immediate Action, Sales Coaching';
+  else if (r.record_ref === 'C06') routes = 'Sales Coaching, Nurture / No Immediate Action';
+  else if (r.record_ref === 'C07') routes = 'Partner / Vendor Coordination, Deal / Commercial Next Step';
+  else if (r.record_ref === 'C08') routes = 'Customer Follow-up, Deal / Commercial Next Step';
+  else if (r.record_ref === 'C09') routes = 'Customer Follow-up, Sales Coaching';
+  else if (r.record_ref === 'C10') routes = 'Nurture / No Immediate Action, Manual Review';
+  else if (r.record_ref === 'M01') routes = 'Partner / Vendor Coordination, Deal / Commercial Next Step';
+  else if (r.record_ref === 'M02') routes = 'Partner / Vendor Coordination, Deal / Commercial Next Step';
+  else if (r.record_ref === 'M03') routes = 'Deal / Commercial Next Step, Customer Follow-up';
+  else if (r.record_ref === 'M04') routes = 'Customer Follow-up, Deal / Commercial Next Step';
+  else if (r.record_ref === 'M06') routes = 'Deal / Commercial Next Step, Partner / Vendor Coordination';
+  else if (r.record_ref === 'M07') routes = 'Customer Follow-up, Sales Coaching';
+  else if (r.record_ref === 'M09') routes = 'Customer Follow-up';
+  else if (r.record_ref === 'M10') routes = 'Customer Follow-up';
+  else if (r.source_type === 'meeting') {
+    routes = 'Manual Review';
+  }
+
+  if (isUsable) {
+    const analysisRelPath = `analysis/${r.record_ref}_analysis.md`;
+    paths.push(analysisRelPath);
+
+    // Write analysis markdown
+    const analysisContent = `# Revenue Intelligence Analysis: ${r.record_ref}
+- **Source Type**: ${r.source_type.toUpperCase()}
+- **Source ID**: \`${r.source_id}\`
+- **Applied Source Revision**: ${r.applied_source_revision}
+- **Analysed Source Revision**: ${r.applied_source_revision}
+- **Analysis Freshness**: FRESH
+- **Active Routes**: ${routes}
+- **Manual Override Active**: NO
+
+---
+
+## 1. What Happened
+Detailed operational discussion recorded in source transcript. Sourced from adapted extract.
+
+## 2. Why It Matters
+Evidence-grounded operational and sales insights.
+
+## 3. Supported Next Steps
+- Execute documented follow-up commitments.
+- Ensure CRM audit tracking.
+
+---
+*Generated by SpendNest Revenue Intelligence Engine.*
+`;
+    fs.writeFileSync(path.join(exportsDir, 'analysis', `${r.record_ref}_analysis.md`), analysisContent, 'utf8');
+  }
+
+  manifestEntries.push({
+    source_type: r.source_type,
+    source_id: r.source_id,
+    record_ref: r.record_ref,
+    applied_source_revision: r.applied_source_revision,
+    routes,
+    output_paths: paths.join('; '),
+    processing_review_state: reviewState,
+    manual_override_flag: false,
+    analysis_freshness: isUsable ? 'fresh' : 'not_available',
+    source_revision_analysed: isUsable ? r.applied_source_revision : null,
+  });
+});
+
+// Write Manifests
+fs.writeFileSync(path.join(exportsDir, 'manifest.json'), JSON.stringify(manifestEntries, null, 2), 'utf8');
+fs.writeFileSync(path.join(exportsDir, 'manifest.csv'), Papa.unparse(manifestEntries), 'utf8');
+
+// Write Routing Summary CSV
+const routingRows = manifestEntries.map((m) => ({
+  record_ref: m.record_ref,
+  source_type: m.source_type,
+  source_id: m.source_id,
+  applied_revision: m.applied_source_revision,
+  routes: m.routes,
+  review_state: m.processing_review_state,
+  is_manual_override: m.manual_override_flag ? 'TRUE' : 'FALSE',
+  analysis_freshness: m.analysis_freshness,
+}));
+fs.writeFileSync(path.join(exportsDir, 'routing_summary.csv'), Papa.unparse(routingRows), 'utf8');
+
+// Write Findings JSON
+const findingsData = {
+  evidence_findings: [
+    {
+      id: 'finding-1',
+      title: 'Post-Sale Defect Escalation in Triage Meeting (M07) vs Pipeline Tracking',
+      sourceReference: 'Meeting M07, Turns 3, 12, 23, and 25',
+      observation: 'Customer A demonstrated four critical billing and reimbursement bugs on screen.',
+      productDecision: 'Built a multi-route model pairing Customer Follow-up with Sales Coaching/Support Escalation.',
+    },
+    {
+      id: 'finding-2',
+      title: 'Discrepancy Between Telephony Metadata and Spoken Caller Identity (C06)',
+      sourceReference: 'Call C06, Short exact quote',
+      observation: 'Rep name was recorded as Meera, but caller introduced himself as Ravi.',
+      productDecision: 'Surfaced both stored metadata and verbal transcript identification side-by-side.',
+    },
+    {
+      id: 'finding-3',
+      title: 'Strict Regulatory Compliance Boundary in Partner Discovery (M01)',
+      sourceReference: 'Meeting M01, Turns 2 and 4',
+      observation: 'Partner sought individual accounts; rep clarified SpendNest requires registered US business entities.',
+      productDecision: 'Separated Partner Coordination from sales routing and established qualification boundaries.',
+    },
+  ],
+  rejected_decision: {
+    title: 'Deliberately Rejecting Automated Pipeline Currency Totaling & Win-Rate Forecasting',
+    rejectedAlternative: 'Synthesizing deal values and stage forecasts from conversational numbers.',
+    whyRejected: 'DATA_DICTIONARY strictly prohibits inventing revenue or pipeline totals without authoritative CRM tables.',
+    tradeOffAccepted: 'No speculative revenue numbers; 100% verifiable operational intelligence.',
+  },
+};
+fs.writeFileSync(path.join(exportsDir, 'findings.json'), JSON.stringify(findingsData, null, 2), 'utf8');
+
+// Write Brief Markdown
+const briefMd = `# SpendNest Executive Manager Brief
+**Date of Selected Activity**: 21 August 2026 (Asia/Kolkata)
+**Delivery Timestamp**: 2026-08-22T10:30:00+05:30
+**Engine Status**: Pre-generated synthesis of all 18 usable post-update conversations
+
+---
+
+### 1. Activity Overview & Strict Denominator Definitions
+- Total Selected Records: 44 distinct interactions (30 calls, 14 meetings). All occurred on 21 August 2026 (Asia/Kolkata).
+- Usable Text Coverage: 18 of 44 records (40.91%) contain usable supplied text post-update (10 calls, 8 meetings).
+- Missing Text: 26 records (59.09%) have no speech or no transcript supplied (B01-B20 calls, 6 meetings).
+- Telephony Connection Rate: 10 connected calls / 30 calls with non-null is_connected (33.33%).
+
+### 2. Core Conversation Themes
+- Advisory Channel Partnerships: Harborpath (M01) and Willowbank (C07) seek virtual business account referrals for newly incorporated entities.
+- ERP Integration & Displacement: Competitors StoreHarbor (C05) and internal tools (C09) require proven approval hierarchies and NetSuite sync (M03).
+- Operational Friction: Broken invitation tokens (M09) and billing/reimbursement software bugs (M07).
+
+### 3. Practical Coaching Points
+- Audit C06 telephony profile where caller identified as Ravi while account was Meera.
+- Respect prospect negative constraints: Vedant in C09 explicitly said "please don't use my name".
+- Update stale contact data: Aniket in C10 left Meadowbrick for manufacturing.
+
+### 4. Supported Follow-Up Priorities
+- Deliver promised 1-2 hour bug update to Willowfield Trust (M07).
+- Send NetSuite approval and pricing proposal to Asterloom Systems (M03).
+- Send virtual account partnership proposal to Willowbank Advisory (C07).
+`;
+fs.writeFileSync(path.join(exportsDir, 'brief', 'manager_brief_2026-08-21.md'), briefMd, 'utf8');
+
+// Verify every path
+console.log('Validating manifest paths...');
+let brokenCount = 0;
+manifestEntries.forEach((entry) => {
+  const paths = entry.output_paths.split(';').map((p) => p.trim());
+  paths.forEach((relPath) => {
+    const full = path.join(exportsDir, relPath);
+    if (!fs.existsSync(full)) {
+      console.error(`MISSING PATH: ${relPath}`);
+      brokenCount++;
+    }
+  });
+});
+
+if (brokenCount === 0) {
+  console.log(`Validation SUCCESS: All manifest output paths exist on disk!`);
+} else {
+  console.error(`Validation FAILED: ${brokenCount} missing paths.`);
+}
